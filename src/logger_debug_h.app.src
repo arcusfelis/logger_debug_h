@@ -1,6 +1,7 @@
 {application, logger_debug_h, [
     {description, "Debug handler for Erlang logger"},
-    {vsn, "0.1"},
+    {licenses, ["Apache-2.0"]},
+    {vsn, "0.1.0"},
     {modules, []},
     {registered, []},
     {applications, [kernel, stdlib]},
