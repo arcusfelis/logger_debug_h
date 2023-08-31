@@ -1,0 +1,63 @@
+name: Erlang CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:25
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Compile
+      run: rebar3 as test compile
+    - name: Run tests
+      run: rebar3 cover_tests
+    - name: Send test coverage report
+      run: rebar3 as test codecov analyze
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  dialyzer:
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:25
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run dialyzer
+      run: rebar3 dialyzer
+
+  xref:
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:25
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run xref
+      run: rebar3 xref
+
+  erlfmt:
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:25
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run erlfmt
+      run: rebar3 format_check
