@@ -86,13 +86,22 @@ wait_for(F, Cond, Retries) ->
     end.
 
 wait_for_handler_removed(Id) ->
-    wait_for(
-        fun() ->
-            logger:remove_handler(Id),
-            lists:member(Id, logger:get_handler_ids())
-        end,
-        false
+    F = fun() ->
+        _ = logger:remove_handler(Id),
+        lists:member(Id, logger:get_handler_ids())
+    end,
+    extra_info(
+        fun() -> wait_for(F, false) end,
+        fun() -> {logger:remove_handler(Id), logger:get_handler_ids()} end
     ).
+
+extra_info(Try, Extra) ->
+    try
+        Try()
+    catch
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, {Reason, Extra()}, Stacktrace)
+    end.
 
 %%%===================================================================
 %%% logger callbacks
