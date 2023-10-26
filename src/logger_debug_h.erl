@@ -20,24 +20,79 @@
     filter_config/1
 ]).
 
+%% Adds a new handler, waits for it to be added.
+%% There is a bug in the logger, when add_handler/remove_handler
+%% are not consistent. So, we do all the synchronisation here instead.
 start(#{id := Id}) ->
     Pid = self(),
-    CleanerPid = spawn(fun() ->
+    Name = reg_cleaner_name(Id),
+    case whereis(Name) of
+        undefined ->
+            ok;
+        OldPid ->
+            OldPid ! stop,
+            wait_for_down(OldPid)
+    end,
+    {Cleaner, Mon} = spawn_monitor(fun() ->
         erlang:monitor(process, Pid),
+        erlang:register(Name, self()),
+        wait_for_handler_removed(Id),
+        ok = logger:add_handler(
+            Id,
+            ?MODULE,
+            #{config => #{forward_to_pid => Pid}}
+        ),
+        wait_for(fun() -> lists:member(Id, logger:get_handler_ids()) end, true),
+        Pid ! {done_starting, self()},
         receive
             {'DOWN', _Ref, process, Pid, _Reason} ->
-                logger:remove_handler(Id)
-        end
+                ok;
+            stop ->
+                ok
+        end,
+        wait_for_handler_removed(Id)
     end),
-    erlang:register(reg_cleaner_name(Id), CleanerPid),
-    logger:add_handler(
-        Id,
-        ?MODULE,
-        #{config => #{forward_to_pid => Pid}}
-    ).
+    receive
+        {'DOWN', Mon, process, Cleaner, Reason} ->
+            error({failed_to_add_handler, Reason});
+        {done_starting, Cleaner} ->
+            ok
+    end.
 
 reg_cleaner_name(Id) when is_atom(Id) ->
     list_to_atom(atom_to_list(Id) ++ "_cleaner").
+
+wait_for_down(Pid) ->
+    Mon = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', Mon, process, Pid, _Reason} ->
+            ok
+    after 5000 ->
+        error({timeout, wait_for_down})
+    end.
+
+wait_for(F, Cond) ->
+    wait_for(F, Cond, 50).
+
+wait_for(_F, Cond, 0) ->
+    error({timeout, wait_for, Cond});
+wait_for(F, Cond, Retries) ->
+    case F() of
+        Cond ->
+            ok;
+        _ ->
+            timer:sleep(100),
+            wait_for(F, Cond, Retries - 1)
+    end.
+
+wait_for_handler_removed(Id) ->
+    wait_for(
+        fun() ->
+            logger:remove_handler(Id),
+            lists:member(Id, logger:get_handler_ids())
+        end,
+        false
+    ).
 
 %%%===================================================================
 %%% logger callbacks

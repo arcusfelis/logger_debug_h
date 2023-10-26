@@ -11,12 +11,13 @@ all() ->
 
 groups() ->
     [
-        {main, [parallel], cases()}
+        {main, [], cases()}
     ].
 
 cases() ->
     [
-        test_log_forwarded
+        test_log_forwarded,
+        adding_handler_twice
     ].
 
 init_per_suite(Config) ->
@@ -53,3 +54,8 @@ test_log_forwarded(_Config) ->
                 msg := {report, #{what := testtest}}
             } = Log
     end.
+
+adding_handler_twice(_Config) ->
+    ok = logger_debug_h:start(#{id => ?FUNCTION_NAME}),
+    ok = logger_debug_h:start(#{id => ?FUNCTION_NAME}),
+    ok.
