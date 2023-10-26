@@ -22,18 +22,22 @@
 
 start(#{id := Id}) ->
     Pid = self(),
-    spawn(fun() ->
+    CleanerPid = spawn(fun() ->
         erlang:monitor(process, Pid),
         receive
             {'DOWN', _Ref, process, Pid, _Reason} ->
                 logger:remove_handler(Id)
         end
     end),
+    erlang:register(reg_cleaner_name(Id), CleanerPid),
     logger:add_handler(
         Id,
         ?MODULE,
         #{config => #{forward_to_pid => Pid}}
     ).
+
+reg_cleaner_name(Id) when is_atom(Id) ->
+    list_to_atom(atom_to_list(Id) ++ "_cleaner").
 
 %%%===================================================================
 %%% logger callbacks
