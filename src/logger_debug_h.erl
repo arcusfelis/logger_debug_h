@@ -36,12 +36,14 @@ start(#{id := Id}) ->
     {Cleaner, Mon} = spawn_monitor(fun() ->
         erlang:monitor(process, Pid),
         erlang:register(Name, self()),
-        wait_for_handler_removed(Id),
-        ok = logger:add_handler(
-            Id,
-            ?MODULE,
-            #{config => #{forward_to_pid => Pid}}
-        ),
+        trans(fun() ->
+            wait_for_handler_removed(Id),
+            ok = logger:add_handler(
+                Id,
+                ?MODULE,
+                #{config => #{forward_to_pid => Pid}}
+            )
+        end),
         wait_for(fun() -> lists:member(Id, logger:get_handler_ids()) end, true),
         Pid ! {done_starting, self()},
         receive
@@ -50,7 +52,9 @@ start(#{id := Id}) ->
             stop ->
                 ok
         end,
-        wait_for_handler_removed(Id)
+        trans(fun() ->
+            wait_for_handler_removed(Id)
+        end)
     end),
     receive
         {'DOWN', Mon, process, Cleaner, Reason} ->
@@ -102,6 +106,14 @@ extra_info(Try, Extra) ->
         Class:Reason:Stacktrace ->
             erlang:raise(Class, {Reason, Extra()}, Stacktrace)
     end.
+
+%% Logger has a race condition when starting/stopping several handlers at the same
+%% time. Logger fails to update the configuration atomically.
+trans(F) ->
+    LockRequest = {?MODULE, self()},
+    Nodes = [node()],
+    Retries = 10,
+    global:trans(LockRequest, F, Nodes, Retries).
 
 %%%===================================================================
 %%% logger callbacks
